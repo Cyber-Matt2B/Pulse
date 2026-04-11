@@ -5,9 +5,9 @@ import sqlite3, datetime, json, os, hashlib, secrets
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-DB_PATH     = "/root/pulse/pulse.db"
-CONFIG_PATH = "/root/pulse/config.py"
-AUTH_FILE   = "/root/pulse/auth.json"
+DB_PATH     = _os.path.join(_BASE_DIR, "pulse.db")
+CONFIG_PATH = _os.path.join(_BASE_DIR, "config.py")
+AUTH_FILE   = _os.path.join(_BASE_DIR, "auth.json")
 security    = HTTPBearer(auto_error=False)
 
 # ── Auth ─────────────────────────────────────────────────────
@@ -576,15 +576,15 @@ import os as _os
 
 @app.get("/agent/agent.py")
 def serve_agent_py():
-    return FileResponse("/root/pulse/agent/agent.py", media_type="text/plain")
+    return FileResponse(_os.path.join(_BASE_DIR, "agent", "agent.py"), media_type="text/plain")
 
 @app.get("/agent/install")
 def serve_install_sh():
-    return FileResponse("/root/pulse/agent/install_linux.sh", media_type="text/plain")
+    return FileResponse(_os.path.join(_BASE_DIR, "agent", "install_linux.sh"), media_type="text/plain")
 
 @app.get("/agent/install.ps1")
 def serve_install_ps1():
-    return FileResponse("/root/pulse/agent/install_windows.ps1", media_type="text/plain")
+    return FileResponse(_os.path.join(_BASE_DIR, "agent", "install_windows.ps1"), media_type="text/plain")
 
 # ── Whitelist rapide ──────────────────────────────────────────
 
@@ -735,7 +735,7 @@ def agent_status(_=Depends(require_auth)):
 @app.post("/api/config/email")
 def set_email_config(data: dict, _=Depends(require_auth)):
     """Configure les notifications email."""
-    cfg_path = "/root/pulse/email_config.json"
+    cfg_path = _os.path.join(_BASE_DIR, "email_config.json")
     import json as _json
     with open(cfg_path, "w") as f:
         _json.dump(data, f)
@@ -744,7 +744,7 @@ def set_email_config(data: dict, _=Depends(require_auth)):
 @app.get("/api/config/email")
 def get_email_config(_=Depends(require_auth)):
     import json as _json, os as _os
-    cfg_path = "/root/pulse/email_config.json"
+    cfg_path = _os.path.join(_BASE_DIR, "email_config.json")
     if not _os.path.exists(cfg_path):
         return {"enabled": False, "smtp_host": "", "smtp_port": 587, "user": "", "password": "", "to": ""}
     with open(cfg_path) as f:
@@ -755,7 +755,7 @@ def test_email(_=Depends(require_auth)):
     """Envoie un email de test."""
     import json as _json, smtplib as _smtp, os as _os
     from email.mime.text import MIMEText
-    cfg_path = "/root/pulse/email_config.json"
+    cfg_path = _os.path.join(_BASE_DIR, "email_config.json")
     if not _os.path.exists(cfg_path):
         return {"ok": False, "error": "Email non configuré"}
     with open(cfg_path) as f:
@@ -780,7 +780,7 @@ def create_backup(_=Depends(require_auth)):
     """Crée un backup de la base SQLite et config.py."""
     import shutil as _shutil, os as _os
     ts = __import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_dir = "/root/pulse/backups"
+    backup_dir = _os.path.join(_BASE_DIR, "backups")
     _os.makedirs(backup_dir, exist_ok=True)
     db_backup  = f"{backup_dir}/pulse_{ts}.db"
     cfg_backup = f"{backup_dir}/config_{ts}.py"
@@ -797,7 +797,7 @@ def create_backup(_=Depends(require_auth)):
 @app.get("/api/backups")
 def list_backups(_=Depends(require_auth)):
     import os as _os
-    backup_dir = "/root/pulse/backups"
+    backup_dir = _os.path.join(_BASE_DIR, "backups")
     if not _os.path.exists(backup_dir):
         return []
     files = sorted([f for f in _os.listdir(backup_dir) if f.endswith('.db')], reverse=True)
@@ -842,7 +842,7 @@ def get_users(_=Depends(require_auth)):
     auth = load_auth()
     result = [{"username": auth["username"], "role": "admin"}]
     # Charger les utilisateurs supplémentaires si fichier users.json existe
-    users_path = "/root/pulse/users.json"
+    users_path = _os.path.join(_BASE_DIR, "users.json")
     if _os.path.exists(users_path):
         with open(users_path) as f:
             extra = _json.load(f)
@@ -859,7 +859,7 @@ def create_user_v2(body: dict, _=Depends(require_auth)):
     role     = body.get("role","readonly")
     if not username or not password:
         return {"ok": False, "error": "Champs manquants"}
-    users_path = "/root/pulse/users.json"
+    users_path = _os.path.join(_BASE_DIR, "users.json")
     users = []
     if _os.path.exists(users_path):
         with open(users_path) as f:
@@ -878,7 +878,7 @@ def delete_user_v2(username: str, _=Depends(require_auth)):
     auth = load_auth()
     if username == auth["username"]:
         return {"ok": False, "error": "Impossible de supprimer l'admin"}
-    users_path = "/root/pulse/users.json"
+    users_path = _os.path.join(_BASE_DIR, "users.json")
     if not _os.path.exists(users_path):
         return {"ok": False, "error": "Utilisateur non trouvé"}
     with open(users_path) as f:
@@ -1092,7 +1092,7 @@ def set_device_tags(ip: str, data: dict, _=Depends(require_auth)):
 @app.get("/api/webhook/test")
 def test_webhook(_=Depends(require_auth)):
     import json as _json, os as _os, requests as _req
-    cfg_path = "/root/pulse/webhook_config.json"
+    cfg_path = _os.path.join(_BASE_DIR, "webhook_config.json")
     if not _os.path.exists(cfg_path):
         return {"ok": False, "error": "Webhook non configuré"}
     with open(cfg_path) as f:
@@ -1106,6 +1106,6 @@ def test_webhook(_=Depends(require_auth)):
 @app.post("/api/webhook/config")
 def set_webhook_config(data: dict, _=Depends(require_auth)):
     import json as _json
-    with open("/root/pulse/webhook_config.json", "w") as f:
+    with open(_os.path.join(_BASE_DIR, "webhook_config.json"), "w") as f:
         _json.dump(data, f)
     return {"ok": True}

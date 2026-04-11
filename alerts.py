@@ -1,3 +1,5 @@
+import os as _os
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
 import requests
 from config import NTFY_ENABLED, NTFY_URL
 
