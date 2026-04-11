@@ -9,4 +9,11 @@ dashboard/build/
 auth.json
 email_config.json
 webhook_config.json
+webhook_config.json
 *.log
+*.bak
+*.bak2
+api.py.bak
+api.py.bak2
+network_insight.db
+pulse.db
