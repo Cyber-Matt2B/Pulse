@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+*.db-journal
+backups/
+dashboard/node_modules/
+dashboard/build/
+auth.json
+email_config.json
+webhook_config.json
+*.log

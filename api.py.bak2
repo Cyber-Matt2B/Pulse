@@ -1,0 +1,274 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import sqlite3, datetime, json, os
+
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+DB_PATH     = "pulse.db"
+CONFIG_PATH = "/root/pulse/config.py"
+
+def db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+CONFIG_KEYS = {
+    "SCAN_INTERVAL":  {"type": "int",   "label": "Intervalle scan (s)",  "min": 60,  "max": 3600},
+    "LATENCY_SLOW":   {"type": "int",   "label": "Seuil lent (ms)",      "min": 50,  "max": 2000},
+    "LATENCY_SPIKE":  {"type": "float", "label": "Multiplicateur spike", "min": 1.5, "max": 10},
+    "INSTABLE_MIN":   {"type": "int",   "label": "Déco. min. instable",  "min": 2,   "max": 20},
+    "NTFY_ENABLED":   {"type": "bool",  "label": "Alertes Ntfy activées"},
+    "NTFY_TOPIC":     {"type": "str",   "label": "Topic Ntfy"},
+    "ALERT_ANOMALIE": {"type": "bool",  "label": "Alerter anomalies"},
+    "ALERT_INTRUS":   {"type": "bool",  "label": "Alerter intrus"},
+    "ALERT_DISPARU":  {"type": "bool",  "label": "Alerter disparus"},
+    "ALERT_NOCTURNE": {"type": "bool",  "label": "Alerter activité nocturne"},
+}
+
+def read_config():
+    values = {}
+    with open(CONFIG_PATH, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for key in CONFIG_KEYS:
+                if line.startswith(key + " ") or line.startswith(key + "="):
+                    parts = line.split("=", 1)
+                    if len(parts) == 2:
+                        raw = parts[1].strip().split("#")[0].strip()
+                        t = CONFIG_KEYS[key]["type"]
+                        try:
+                            if t == "int":   values[key] = int(raw)
+                            elif t == "float": values[key] = float(raw)
+                            elif t == "bool":  values[key] = raw == "True"
+                            else:              values[key] = raw.strip('"').strip("'")
+                        except: values[key] = raw
+    return values
+
+def write_config(updates):
+    with open(CONFIG_PATH, "r") as f:
+        lines = f.readlines()
+    new_lines = []
+    for line in lines:
+        written = False
+        for key, val in updates.items():
+            if line.strip().startswith(key + " ") or line.strip().startswith(key + "="):
+                t = CONFIG_KEYS[key]["type"]
+                if t == "bool":  py_val = "True" if val else "False"
+                elif t == "str": py_val = f'"{val}"'
+                else:            py_val = str(val)
+                comment = ""
+                if "#" in line:
+                    comment = "  # " + line.split("#", 1)[1].rstrip()
+                new_lines.append(f"{key:<16}= {py_val}{comment}\n")
+                written = True
+                break
+        if not written:
+            new_lines.append(line)
+    if "NTFY_TOPIC" in updates:
+        new_lines = [f'NTFY_URL        = f"https://ntfy.sh/{{NTFY_TOPIC}}"\n'
+                     if l.strip().startswith("NTFY_URL") else l for l in new_lines]
+    with open(CONFIG_PATH, "w") as f:
+        f.writelines(new_lines)
+
+@app.get("/api/config")
+def get_config():
+    values = read_config()
+    return {k: {**m, "value": values.get(k)} for k, m in CONFIG_KEYS.items()}
+
+@app.post("/api/config")
+async def set_config(request_data: dict):
+    allowed = {k: v for k, v in request_data.items() if k in CONFIG_KEYS}
+    if not allowed:
+        return {"ok": False, "error": "Aucune clé valide"}
+    for key, val in allowed.items():
+        meta = CONFIG_KEYS[key]
+        if meta["type"] in ("int", "float"):
+            if "min" in meta and val < meta["min"]:
+                return {"ok": False, "error": f"{key} minimum {meta['min']}"}
+            if "max" in meta and val > meta["max"]:
+                return {"ok": False, "error": f"{key} maximum {meta['max']}"}
+    write_config(allowed)
+    return {"ok": True, "updated": list(allowed.keys())}
+
+@app.get("/api/devices")
+def get_devices():
+    conn = db(); c = conn.cursor()
+    c.execute('''SELECT s.ip, s.hostname, s.status, s.latency_ms, s.timestamp, s.network,
+        COALESCE(s.vendor, 'inconnu') as vendor,
+        (SELECT timestamp FROM scans s2 WHERE s2.ip = s.ip AND s2.status = 'up'
+         ORDER BY s2.timestamp DESC LIMIT 1) as last_seen_up
+        FROM scans s WHERE s.timestamp = (SELECT MAX(timestamp) FROM scans) ORDER BY s.ip''')
+    rows = c.fetchall(); conn.close()
+    return [dict(r) for r in rows]
+
+@app.get("/api/history/{ip}")
+def history(ip: str, limit: int = 100):
+    c = db().cursor()
+    c.execute('SELECT timestamp,latency_ms,status FROM scans WHERE ip=? ORDER BY timestamp DESC LIMIT ?', (ip, limit))
+    return [dict(r) for r in c.fetchall()]
+
+@app.get("/api/events")
+def events():
+    c = db().cursor()
+    c.execute('SELECT timestamp,ip,hostname,event,network FROM events ORDER BY timestamp DESC LIMIT 200')
+    return [dict(r) for r in c.fetchall()]
+
+@app.get("/api/stats")
+def stats():
+    c = db().cursor()
+    c.execute("SELECT COUNT(DISTINCT ip) FROM scans"); total = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM scans WHERE status='up' AND timestamp=(SELECT MAX(timestamp) FROM scans)"); online = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM events WHERE event='NOUVEAU' AND timestamp>=datetime('now','-24 hours')"); new24 = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM events WHERE event='DISPARU' AND timestamp>=datetime('now','-24 hours')"); gone24 = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM scans WHERE timestamp>=datetime('now','-1 hour')"); scans1h = c.fetchone()[0]
+    c.execute("SELECT ROUND(AVG(latency_ms),2) FROM scans WHERE status='up' AND timestamp=(SELECT MAX(timestamp) FROM scans)"); avg_lat = c.fetchone()[0]
+    return {"total":total,"online":online,"new24":new24,"gone24":gone24,"scans1h":scans1h,"avg_lat":avg_lat}
+
+@app.get("/api/anomalies")
+def anomalies():
+    c = db().cursor()
+    c.execute('''SELECT ip,hostname,ROUND(AVG(latency_ms),1) as avg_lat,
+        ROUND(MAX(latency_ms),1) as max_lat, COUNT(*) as scans,
+        SUM(CASE WHEN status='down' THEN 1 ELSE 0 END) as downs
+        FROM scans WHERE timestamp>=datetime('now','-24 hours')
+        GROUP BY ip HAVING avg_lat>200 OR downs>=2 OR max_lat>500 ORDER BY avg_lat DESC''')
+    return [dict(r) for r in c.fetchall()]
+
+@app.get("/api/heatmap")
+def heatmap():
+    c = db().cursor()
+    c.execute('''SELECT ip,hostname,strftime('%H',timestamp) as hour,
+        COUNT(*) as total, SUM(CASE WHEN status='up' THEN 1 ELSE 0 END) as up
+        FROM scans WHERE timestamp>=datetime('now','-7 days')
+        GROUP BY ip,hour ORDER BY ip,hour''')
+    return [dict(r) for r in c.fetchall()]
+
+@app.get("/api/topology")
+def topology():
+    c = db().cursor()
+    c.execute('SELECT DISTINCT ip,hostname,status,latency_ms FROM scans WHERE timestamp=(SELECT MAX(timestamp) FROM scans)')
+    devs = c.fetchall()
+    nodes = [{"id":d["ip"],"hostname":d["hostname"],"status":d["status"],"latency":d["latency_ms"]} for d in devs]
+    links = [{"source":"192.168.1.1","target":d["ip"]} for d in devs if d["ip"]!="192.168.1.1"]
+    return {"nodes":nodes,"links":links}
+
+@app.get("/api/latency_timeline")
+def latency_timeline():
+    c = db().cursor()
+    c.execute('''SELECT ip, hostname, timestamp, latency_ms FROM scans
+        WHERE timestamp>=datetime('now','-6 hours') AND status='up' ORDER BY timestamp ASC''')
+    rows = c.fetchall(); result = {}
+    for r in rows:
+        if r["ip"] not in result:
+            result[r["ip"]] = {"hostname": r["hostname"], "data": []}
+        result[r["ip"]]["data"].append({"t": r["timestamp"], "v": r["latency_ms"]})
+    return result
+
+@app.get("/api/devices_config")
+def get_devices_config():
+    c = db().cursor(); c.execute("SELECT * FROM devices_config")
+    return [dict(r) for r in c.fetchall()]
+
+@app.post("/api/devices_config/{ip}")
+def set_device_config(ip: str, data: dict):
+    conn = db(); c = conn.cursor()
+    ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute('''INSERT INTO devices_config (ip, label, whitelisted, notes, updated_at) VALUES (?,?,?,?,?)
+        ON CONFLICT(ip) DO UPDATE SET label=excluded.label, whitelisted=excluded.whitelisted,
+        notes=excluded.notes, updated_at=excluded.updated_at''',
+        (ip, data.get("label",""), data.get("whitelisted",1), data.get("notes",""), ts))
+    conn.commit(); return {"ok": True}
+
+@app.delete("/api/devices_config/{ip}")
+def delete_device_config(ip: str):
+    conn = db(); c = conn.cursor()
+    c.execute("DELETE FROM devices_config WHERE ip=?", (ip,)); conn.commit()
+    return {"ok": True}
+
+@app.get("/api/health")
+def health_score():
+    conn = db(); c = conn.cursor(); score = 100; details = []
+    c.execute("SELECT ip, hostname, latency_ms, status FROM scans WHERE timestamp=(SELECT MAX(timestamp) FROM scans)")
+    for d in c.fetchall():
+        if d["latency_ms"] and d["latency_ms"] > 200:
+            score -= 15; details.append({"icon":"🐢","msg":f"{d['hostname']} lent ({round(d['latency_ms'])}ms)","pts":-15})
+    c.execute("SELECT ip, hostname, COUNT(*) as downs FROM scans WHERE status='down' AND timestamp>=datetime('now','-24 hours') GROUP BY ip HAVING downs>=2")
+    for d in c.fetchall():
+        score -= 10; details.append({"icon":"📡","msg":f"{d['hostname']} instable ({d['downs']} déco.)","pts":-10})
+    c.execute('''SELECT DISTINCT s.ip, s.hostname FROM scans s LEFT JOIN devices_config dc ON s.ip=dc.ip
+        WHERE s.timestamp=(SELECT MAX(timestamp) FROM scans)
+        AND (dc.whitelisted=0 OR (dc.ip IS NULL AND s.hostname='inconnu'))''')
+    for d in c.fetchall():
+        score -= 8; details.append({"icon":"🔍","msg":f"Appareil inconnu : {d['ip']}","pts":-8})
+    c.execute('''SELECT COUNT(*) as cnt FROM scans s WHERE timestamp>=datetime('now','-1 hour')
+        AND latency_ms>(SELECT AVG(latency_ms)*3 FROM scans s2 WHERE s2.ip=s.ip AND latency_ms IS NOT NULL) AND latency_ms>50''')
+    spikes = c.fetchone()["cnt"]
+    if spikes > 0:
+        score -= min(spikes*5,20); details.append({"icon":"⚡","msg":f"{spikes} spike(s)","pts":-min(spikes*5,20)})
+    c.execute("SELECT COUNT(*) as cnt FROM events WHERE event='DISPARU' AND timestamp>=datetime('now','-1 hour')")
+    disparus = c.fetchone()["cnt"]
+    if disparus > 0:
+        score -= min(disparus*3,15); details.append({"icon":"👋","msg":f"{disparus} disparu(s)","pts":-min(disparus*3,15)})
+    score = max(0, score)
+    label = "Excellent" if score>=90 else "Bon" if score>=75 else "Moyen" if score>=50 else "Critique"
+    color = "#00E5A0" if score>=90 else "#38BDF8" if score>=75 else "#FBB03B" if score>=50 else "#F87171"
+    conn.close(); return {"score":score,"label":label,"color":color,"details":details}
+
+@app.get("/api/summary")
+def summary():
+    conn = db(); c = conn.cursor()
+    c.execute("SELECT COUNT(DISTINCT ip) FROM scans"); total = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM scans WHERE status='up' AND timestamp=(SELECT MAX(timestamp) FROM scans)"); online = c.fetchone()[0]
+    c.execute('''SELECT s.ip, COALESCE(dc.label, s.hostname) as name, ROUND(AVG(s.latency_ms),1) as avg_lat,
+        COUNT(*) as scans, SUM(CASE WHEN s.status='down' THEN 1 ELSE 0 END) as downs
+        FROM scans s LEFT JOIN devices_config dc ON s.ip=dc.ip
+        WHERE s.timestamp>=datetime('now','-6 hours') GROUP BY s.ip ORDER BY avg_lat DESC''')
+    all_devices = c.fetchall()
+    c.execute('''SELECT s.ip, COALESCE(dc.label, s.hostname) as name, strftime('%H:%M', s.timestamp) as heure
+        FROM scans s LEFT JOIN devices_config dc ON s.ip=dc.ip
+        WHERE s.timestamp=(SELECT MAX(timestamp) FROM scans)
+        AND (dc.whitelisted=0 OR (dc.ip IS NULL AND s.hostname='inconnu'))''')
+    intrus = c.fetchall()
+    c.execute('''SELECT s.ip, COALESCE(dc.label, s.hostname) as name
+        FROM events e LEFT JOIN devices_config dc ON e.ip=dc.ip LEFT JOIN scans s ON e.ip=s.ip
+        WHERE e.event='DISPARU' AND e.timestamp>=datetime('now','-8 hours')
+        GROUP BY e.ip HAVING COUNT(*)>=5''')
+    instables = c.fetchall()
+    conn.close()
+    phrases = []; recommandations = []
+    if online == total: phrases.append(f"Tous les {total} appareils sont en ligne.")
+    elif online == 0:   phrases.append("Aucun appareil détecté.")
+    else:               phrases.append(f"{online} appareil(s) en ligne sur {total}.")
+    slow = [d for d in all_devices if d["avg_lat"] and d["avg_lat"] > 200]
+    if slow:
+        for d in slow:
+            name = d["name"].split(".")[0]
+            recommandations.append({"niveau":"warning","icon":"🐢","titre":f"Lent — {name}","detail":f"{d['avg_lat']} ms moy.","action":"Rapprocher du routeur ou passer en Ethernet."})
+    else:
+        phrases.append("Latence normale sur tous les appareils.")
+    for i in intrus:
+        phrases.append(f"Appareil non reconnu ({i['ip']}).")
+        recommandations.append({"niveau":"danger","icon":"🔍","titre":f"Inconnu — {i['ip']}","detail":"Non whitelisté.","action":"Identifier via le dashboard ou bloquer depuis le routeur."})
+    if not intrus: phrases.append("Aucun appareil inconnu.")
+    for d in instables:
+        recommandations.append({"niveau":"warning","icon":"📡","titre":f"Instable — {d['name']}","detail":"Déconnexions fréquentes.","action":"Vérifier le signal WiFi."})
+    c2 = db().cursor()
+    c2.execute("SELECT COUNT(*) FROM events WHERE event='NOUVEAU' AND strftime('%H',timestamp) BETWEEN '01' AND '05' AND timestamp>=datetime('now','-24 hours')")
+    nuit = c2.fetchone()[0]
+    if nuit > 0:
+        phrases.append(f"{nuit} connexion(s) nocturne(s).")
+        recommandations.append({"niveau":"warning","icon":"🌙","titre":"Activité nocturne","detail":f"{nuit} connexion(s) entre 1h-5h.","action":"Vérifier le journal."})
+    if not recommandations:
+        recommandations.append({"niveau":"success","icon":"✓","titre":"Réseau en bonne santé","detail":"Aucun problème détecté.","action":"Aucune action requise."})
+    return {"phrases":phrases,"recommandations":recommandations,"generated_at":datetime.datetime.now().strftime('%H:%M')}
+
+@app.get("/api/ports")
+def get_ports(ip: str = None):
+    c = db().cursor()
+    if ip:
+        c.execute("SELECT ip,port,protocol,service,timestamp FROM ports WHERE ip=? ORDER BY timestamp DESC LIMIT 200", (ip,))
+    else:
+        c.execute("SELECT ip,port,protocol,service,timestamp FROM ports WHERE timestamp=(SELECT MAX(timestamp) FROM ports) ORDER BY ip,port")
+    return [dict(r) for r in c.fetchall()]
