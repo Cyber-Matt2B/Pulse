@@ -1034,6 +1034,7 @@ def security_score(_=Depends(require_auth)):
 
 @app.get("/api/compare/weeks")
 def compare_weeks(_=Depends(require_auth)):
+    # v1.2 fix
     """Comparaison cette semaine vs semaine dernière."""
     try:
         conn = db()
