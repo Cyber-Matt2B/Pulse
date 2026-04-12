@@ -33,11 +33,22 @@ function Reload-Path {
 }
 
 function Get-PythonCmd {
-    foreach ($cmd in @("python", "python3", "py")) {
+    foreach ($cmd in @("python3", "py", "python")) {
         try {
             $v = & $cmd --version 2>&1
             if ($v -match "Python 3\.\d+") { return $cmd }
         } catch {}
+    }
+    # Chercher dans les chemins communs
+    $paths = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "C:\Python313\python.exe",
+        "C:\Python311\python.exe"
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) { return $p }
     }
     return $null
 }
