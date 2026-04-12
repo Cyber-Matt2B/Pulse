@@ -1,3 +1,5 @@
+import os as _os
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
