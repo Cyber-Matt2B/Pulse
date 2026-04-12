@@ -1034,46 +1034,45 @@ def security_score(_=Depends(require_auth)):
 
 @app.get("/api/compare/weeks")
 def compare_weeks(_=Depends(require_auth)):
-    try:
     """Comparaison cette semaine vs semaine dernière."""
-    conn = db()
-    def week_stats(offset):
-        r = conn.execute(f"""
-            SELECT
-                COUNT(DISTINCT ip) as devices,
-                AVG(latency_ms) as avg_lat,
-                COUNT(DISTINCT CASE WHEN event='NOUVEAU' THEN ip END) as new_devices
-            FROM scans s
-            LEFT JOIN events e ON s.ip=e.ip
-            WHERE s.timestamp >= datetime('now', '-{7+offset} days')
-            AND s.timestamp < datetime('now', '-{offset} days')
-        """).fetchone()
-        score_r = conn.execute(f"""
-            SELECT AVG(score) as avg_score FROM score_history
-            WHERE timestamp >= datetime('now', '-{7+offset} days')
-            AND timestamp < datetime('now', '-{offset} days')
-        """).fetchone()
+    try:
+        conn = db()
+        def week_stats(offset):
+            r = conn.execute(f"""
+                SELECT COUNT(DISTINCT s.ip) as devices,
+                       AVG(s.latency_ms) as avg_lat
+                FROM scans s
+                WHERE s.timestamp >= datetime('now', '-{7+offset} days')
+                AND s.timestamp < datetime('now', '-{offset} days')
+            """).fetchone()
+            score_r = conn.execute(f"""
+                SELECT AVG(score) as avg_score FROM score_history
+                WHERE timestamp >= datetime('now', '-{7+offset} days')
+                AND timestamp < datetime('now', '-{offset} days')
+            """).fetchone()
+            return {
+                "devices": r["devices"] if r else 0,
+                "avg_lat": round(r["avg_lat"] or 0, 2),
+                "new_devices": 0,
+                "avg_score": round(score_r["avg_score"] or 0, 1) if score_r else 0
+            }
+        this_week = week_stats(0)
+        last_week = week_stats(7)
+        conn.close()
+        def diff(a, b):
+            if b == 0: return 0
+            return round(((a - b) / b) * 100, 1)
         return {
-            "devices": r['devices'] if r else 0,
-            "avg_lat": round(r['avg_lat'] or 0, 2),
-            "new_devices": r['new_devices'] if r else 0,
-            "avg_score": round(score_r['avg_score'] or 0, 1) if score_r else 0
+            "this_week": this_week,
+            "last_week": last_week,
+            "diff": {
+                "devices": diff(this_week["devices"], last_week["devices"]),
+                "avg_lat": diff(this_week["avg_lat"], last_week["avg_lat"]),
+                "avg_score": diff(this_week["avg_score"], last_week["avg_score"]),
+            }
         }
-    this_week = week_stats(0)
-    last_week = week_stats(7)
-    conn.close()
-    def diff(a, b):
-        if b == 0: return 0
-        return round(((a - b) / b) * 100, 1)
-    return {
-        "this_week": this_week,
-        "last_week": last_week,
-        "diff": {
-            "devices": diff(this_week['devices'], last_week['devices']),
-            "avg_lat": diff(this_week['avg_lat'], last_week['avg_lat']),
-            "avg_score": diff(this_week['avg_score'], last_week['avg_score']),
-        }
-    }
+    except Exception as e:
+        return {"this_week": {}, "last_week": {}, "diff": {}, "error": str(e)}
 
 @app.get("/api/devices/{ip}/tags")
 def get_device_tags(ip: str, _=Depends(require_auth)):
