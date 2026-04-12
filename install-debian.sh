@@ -6,7 +6,6 @@
 # curl -sSL https://raw.githubusercontent.com/Cyber-Matt2B/Pulse/main/install-debian.sh | bash
 # ============================================
 
-set -e
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
@@ -58,20 +57,16 @@ rm /tmp/pulse-build.zip
 echo -e "${GREEN}  Dashboard OK${NC}"
 
 echo -e "${CYAN}[5/6] Installation des dependances Python...${NC}"
-python3 -m venv "$PULSE_DIR/venv"
-"$PULSE_DIR/venv/bin/pip" install -q fastapi uvicorn ping3 netifaces manuf requests psutil python-nmap
+cd "$PULSE_DIR"
+python3 -m venv venv
+venv/bin/pip install --upgrade pip -q
+venv/bin/pip install fastapi uvicorn ping3 netifaces manuf requests psutil python-nmap -q
 npm install -g serve -q 2>/dev/null
 echo -e "${GREEN}  OK${NC}"
 
 echo -e "${CYAN}[6/6] Configuration...${NC}"
 # Init DB
-"$PULSE_DIR/venv/bin/python3" -c "
-import sys
-sys.path.insert(0, '$PULSE_DIR')
-from db import init_db
-init_db()
-print('DB OK')
-"
+cd "$PULSE_DIR" && venv/bin/python3 -c "import sys; sys.path.insert(0, '$PULSE_DIR'); from db import init_db; init_db(); print('DB OK')"
 
 # Services systemd
 cat > /etc/systemd/system/pulse-api.service << SVCEOF
@@ -109,7 +104,7 @@ systemctl enable pulse-api pulse-dashboard
 systemctl start pulse-api pulse-dashboard
 
 # Cron scan toutes les 5 minutes
-(crontab -l 2>/dev/null; echo "*/5 * * * * cd $PULSE_DIR && $PULSE_DIR/venv/bin/python3 modules/network.py >> /var/log/pulse-scan.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "*/5 * * * * cd /opt/pulse && /opt/pulse/venv/bin/python3 modules/network.py >> /var/log/pulse-scan.log 2>&1") | crontab -
 
 sleep 3
 API_STATUS=$(systemctl is-active pulse-api)
