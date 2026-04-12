@@ -75,11 +75,11 @@ function Install-PulseDeps {
     $deps = @("fastapi", "uvicorn", "ping3", "ifaddr", "manuf", "requests", "psutil", "python-nmap")
     foreach ($dep in $deps) {
         Write-Host "    $dep..." -NoNewline
-        pip install $dep -q 2>&1 | Out-Null
+        python -m pip install $dep -q 2>&1 | Out-Null
         Write-Host " OK" -ForegroundColor Green
     }
     Write-Host "  Installation serve..." -NoNewline
-    npm install -g serve -q 2>&1 | Out-Null
+    npm install -g serve 2>&1 | Out-Null
     Write-Host " OK" -ForegroundColor Green
 }
 
@@ -108,17 +108,14 @@ function Download-Pulse {
     }
 
     # auth.json par defaut
-    $hash = (python -c "import hashlib; print(hashlib.sha256('admin123'.encode()).hexdigest())" 2>&1)
-    $auth = "{`"username`":`"admin`",`"password`":`"$hash`",`"token`":`"pulse-token-windows`"}"
-    [System.IO.File]::WriteAllText("$InstallDir\auth.json", $auth)
-    Write-Host "    auth.json OK (admin / admin123)" -ForegroundColor Green
+    Write-Host "    auth.json sera cree automatiquement au premier demarrage" -ForegroundColor Green
 }
 
 function Download-Dashboard {
     Write-Host "  Telechargement du dashboard..." -ForegroundColor Cyan
     $buildZip = "$env:TEMP\pulse-build.zip"
     try {
-        Invoke-WebRequest -Uri "$ReleaseBase/pulse-build.zip" -OutFile $buildZip -UseBasicParsing
+        Invoke-WebRequest -Uri "$ReleaseBase/pulse-build-v1.1.zip" -OutFile $buildZip -UseBasicParsing
         New-Item -ItemType Directory -Force -Path "$InstallDir\dashboard" | Out-Null
         Expand-Archive -Path $buildZip -DestinationPath "$InstallDir\dashboard" -Force
         Remove-Item $buildZip -Force
