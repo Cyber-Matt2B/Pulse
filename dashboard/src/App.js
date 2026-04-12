@@ -824,11 +824,11 @@ function Topbar({ page, refresh, lastUpdate, darkMode, setDarkMode, onLogout, pr
         <button onClick={refresh} style={{width:34,height:34,background:C.panel2,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
           <Icon name="refresh" size={14} color={C.textDim}/>
         </button>
-        <BellMenu token={token} events={events} stats={stats} C={C} API=(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000") onNavigate={onNavigate}/>
+        <BellMenu token={token} events={events} stats={stats} C={C} API={(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000")} onNavigate={onNavigate}/>
         <button onClick={()=>setDarkMode(!darkMode)} style={{width:34,height:34,background:C.panel2,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
           <Icon name={darkMode?"sun":"moon"} size={14} color={C.textDim}/>
         </button>
-        <ProfileMenu API=(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000") token={token} darkMode={darkMode} setDarkMode={setDarkMode} onLogout={onLogout} prefs={prefs} setPrefs={setPrefs} lang={lang} setLang={setLang} C={C} key={token}/>
+        <ProfileMenu API={(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000")} token={token} darkMode={darkMode} setDarkMode={setDarkMode} onLogout={onLogout} prefs={prefs} setPrefs={setPrefs} lang={lang} setLang={setLang} C={C} key={token}/>
       </div>
     </div>
   );
