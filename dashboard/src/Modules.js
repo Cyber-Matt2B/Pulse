@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import * as d3 from 'd3';
 
-const API = "http://192.168.1.16:8000";
+const API = (window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000");
 
 function authH(token) {
   return { headers: { Authorization: `Bearer ${token}` } };
@@ -366,7 +366,7 @@ export function WifiAnalysis({ token, C , lang="fr"}) {
 export function SnmpPage({ token, C, lang="fr" }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const API = "http://192.168.1.16:8000";
+  const API = (window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000");
   const h = { headers: { Authorization: `Bearer ${token}` } };
   const t = lang==="en" ? {
     title:"SNMP Scanner", scan:"Scan now", available:"Available",

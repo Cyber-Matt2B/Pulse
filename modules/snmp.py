@@ -1,7 +1,12 @@
-import subprocess, sqlite3, datetime, threading
-sys.path.insert(0, '/root/pulse')
+import os as _os
+import sys as _sys
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_PULSE_DIR = _os.path.dirname(_BASE_DIR)  # dossier parent = racine pulse
+_sys.path.insert(0, _PULSE_DIR)
+DB_PATH = _os.path.join(_PULSE_DIR, "pulse.db")
 
-DB_PATH = "/root/pulse/pulse.db"
+import subprocess, sqlite3, datetime, threading
+
 
 def init_snmp_table():
     conn = sqlite3.connect(DB_PATH)

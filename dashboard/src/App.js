@@ -7,7 +7,7 @@ import * as d3 from "d3";
 import Settings from "./Settings";
 import ProfileMenu from "./ProfileMenu";
 
-const API = "http://192.168.1.16:8000";
+const API = (window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000");
 function getToken() { return localStorage.getItem("pulse_token"); }
 function setToken(t) { localStorage.setItem("pulse_token", t); }
 function clearToken() { localStorage.removeItem("pulse_token"); }
@@ -317,7 +317,7 @@ function DeviceLatencyModal({ device, token, onClose, C, lang="fr" }) {
   const [data, setData] = useState([]);
   const [days, setDays] = useState(7);
   const ref = useRef();
-  const API = "http://192.168.1.16:8000";
+  const API = (window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000");
 
   useEffect(() => {
     fetch(`${API}/api/history/${device.ip}/extended?days=${days}`, {
@@ -824,11 +824,11 @@ function Topbar({ page, refresh, lastUpdate, darkMode, setDarkMode, onLogout, pr
         <button onClick={refresh} style={{width:34,height:34,background:C.panel2,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
           <Icon name="refresh" size={14} color={C.textDim}/>
         </button>
-        <BellMenu token={token} events={events} stats={stats} C={C} API="http://192.168.1.16:8000" onNavigate={onNavigate}/>
+        <BellMenu token={token} events={events} stats={stats} C={C} API=(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000") onNavigate={onNavigate}/>
         <button onClick={()=>setDarkMode(!darkMode)} style={{width:34,height:34,background:C.panel2,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
           <Icon name={darkMode?"sun":"moon"} size={14} color={C.textDim}/>
         </button>
-        <ProfileMenu API="http://192.168.1.16:8000" token={token} darkMode={darkMode} setDarkMode={setDarkMode} onLogout={onLogout} prefs={prefs} setPrefs={setPrefs} lang={lang} setLang={setLang} C={C} key={token}/>
+        <ProfileMenu API=(window.location.hostname==="localhost"?"http://localhost:8000":"http://"+window.location.hostname+":8000") token={token} darkMode={darkMode} setDarkMode={setDarkMode} onLogout={onLogout} prefs={prefs} setPrefs={setPrefs} lang={lang} setLang={setLang} C={C} key={token}/>
       </div>
     </div>
   );

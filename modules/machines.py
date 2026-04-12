@@ -1,7 +1,12 @@
-import sqlite3, datetime, subprocess, sys, socket, re
-sys.path.insert(0, '/root/pulse')
+import os as _os
+import sys as _sys
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_PULSE_DIR = _os.path.dirname(_BASE_DIR)  # dossier parent = racine pulse
+_sys.path.insert(0, _PULSE_DIR)
+DB_PATH = _os.path.join(_PULSE_DIR, "pulse.db")
 
-DB_PATH = "/root/pulse/pulse.db"
+import sqlite3, datetime, subprocess, sys, socket, re
+
 
 def get_real_ip():
     """Retourne la vraie IP réseau (pas 127.x.x.x)."""

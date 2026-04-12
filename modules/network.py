@@ -1,3 +1,10 @@
+import os as _os
+import sys as _sys
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_PULSE_DIR = _os.path.dirname(_BASE_DIR)  # dossier parent = racine pulse
+_sys.path.insert(0, _PULSE_DIR)
+DB_PATH = _os.path.join(_PULSE_DIR, "pulse.db")
+
 import nmap
 import sqlite3
 import datetime
@@ -8,7 +15,6 @@ import threading
 import sys
 import manuf
 
-sys.path.insert(0, '/root/pulse')
 from ping3 import ping
 from alerts import alert_anomalie, alert_intrus, alert_disparu, alert_nocturne
 from config import LATENCY_SLOW, LATENCY_SPIKE, INSTABLE_MIN

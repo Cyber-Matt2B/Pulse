@@ -5,6 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import sqlite3, datetime, json, os, hashlib, secrets
 
+# Auto-init DB
+try:
+    from db import init_db as _init_db
+    _init_db()
+except Exception as _e:
+    print(f"DB init warning: {_e}")
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 DB_PATH     = _os.path.join(_BASE_DIR, "pulse.db")
@@ -430,7 +437,7 @@ def login_unified(body: dict):
 # ── Modules endpoints ─────────────────────────────────────────
 
 import sys
-sys.path.insert(0, '/root/pulse')
+
 
 @app.get("/api/snmp/{ip}")
 def api_snmp(ip: str, _=Depends(require_auth)):
@@ -540,7 +547,7 @@ def trigger_fingerprint_scan(_=Depends(require_auth)):
     conn = db()
     ips = [r[0] for r in conn.execute("SELECT DISTINCT ip FROM scans WHERE timestamp=(SELECT MAX(timestamp) FROM scans)").fetchall()]
     conn.close()
-    sys.path.insert(0, '/root/pulse')
+    
     from modules.network import fingerprint_device, ARP_TABLE
     results = []
     for ip in ips:
@@ -1027,6 +1034,7 @@ def security_score(_=Depends(require_auth)):
 
 @app.get("/api/compare/weeks")
 def compare_weeks(_=Depends(require_auth)):
+    try:
     """Comparaison cette semaine vs semaine dernière."""
     conn = db()
     def week_stats(offset):
