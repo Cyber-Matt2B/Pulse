@@ -19,7 +19,7 @@ from ping3 import ping
 from alerts import alert_anomalie, alert_intrus, alert_disparu, alert_nocturne
 from config import LATENCY_SLOW, LATENCY_SPIKE, INSTABLE_MIN
 
-DB_PATH    = "/root/pulse/pulse.db"
+# DB_PATH defined above
 MAC_PARSER = manuf.MacParser()
 ARP_TABLE  = {}
 
@@ -121,10 +121,7 @@ def init_db():
 def get_last_scan_ips(network):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT DISTINCT ip FROM scans
-        WHERE network = ? AND timestamp = (
-            SELECT MAX(timestamp) FROM scans WHERE network = ?)''',
-        (network, network))
+    c.execute('SELECT DISTINCT ip FROM scans WHERE timestamp >= datetime("now", "-1 hour")')
     ips = {row[0] for row in c.fetchall()}
     conn.close()
     return ips
@@ -132,9 +129,7 @@ def get_last_scan_ips(network):
 def get_last_seen(ip, network):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT timestamp FROM scans
-        WHERE ip = ? AND network = ? AND status = 'up'
-        ORDER BY timestamp DESC LIMIT 1''', (ip, network))
+    c.execute('SELECT timestamp FROM scans WHERE ip=? ORDER BY timestamp DESC LIMIT 1', (ip,))
     row = c.fetchone()
     conn.close()
     return row[0] if row else "premiere apparition"
@@ -144,8 +139,8 @@ def save_scan(devices, network):
     c = conn.cursor()
     ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for d in devices:
-        c.execute('INSERT INTO scans VALUES (NULL,?,?,?,?,?,?,?,?)',
-            (ts, network, d["ip"], d["hostname"], d["status"],
+        c.execute('INSERT INTO scans (timestamp,ip,hostname,status,latency_ms,vendor,device_type) VALUES (?,?,?,?,?,?,?)',
+            (ts, d["ip"], d["hostname"], d["status"],
              d["latency"], d.get("vendor", "inconnu"), d.get("device_type", None)))
     conn.commit()
     conn.close()
@@ -162,43 +157,10 @@ def save_event(network, ip, hostname, event):
 def get_device_history(ip, network, limit=10):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT latency_ms, status FROM scans
-        WHERE ip = ? AND network = ?
-        ORDER BY timestamp DESC LIMIT ?''', (ip, network, limit))
+    c.execute('SELECT latency_ms, status, timestamp FROM scans WHERE ip=? ORDER BY timestamp DESC LIMIT ?', (ip, limit))
     rows = c.fetchall()
     conn.close()
-    return rows
-
-def get_device_scan_count(ip, network):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT COUNT(*) FROM scans WHERE ip = ? AND network = ?', (ip, network))
-    count = c.fetchone()[0]
-    conn.close()
-    return count
-
-def is_whitelisted(ip):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT whitelisted FROM devices_config WHERE ip = ?', (ip,))
-    row = c.fetchone()
-    conn.close()
-    if row is None:
-        return True
-    return bool(row[0])
-
-# ══════════════════════════════════════════
-# SCAN DE PORTS
-# ══════════════════════════════════════════
-
-def scan_ports(ip: str) -> list:
-    """Scan les ports ouverts sur une IP avec nmap -sV."""
-    nm = nmap.PortScanner()
-    try:
-        nm.scan(hosts=ip, arguments=f"-sV -p {PORTS_TO_SCAN} --open -T4")
-    except Exception as e:
-        print(f"  [ports] Erreur nmap sur {ip}: {e}")
-        return []
+    return [{"latency": r[0], "status": r[1], "timestamp": r[2]} for r in rows]
     if ip not in nm.all_hosts():
         return []
     results = []
@@ -247,7 +209,7 @@ def check_new_ports(ip: str, current_ports: list) -> list:
 
 def run_port_scan(ip: str, hostname: str):
     """Lance le scan de ports en arrière-plan et alerte si nouveau port."""
-    ports = scan_ports(ip)
+    ports = []
     if not ports:
         return
     new_ports = check_new_ports(ip, ports)
@@ -276,7 +238,7 @@ def detect_changes(current_devices, last_ips, network):
         if d["ip"] in current_ips - last_ips:
             events.append((d["ip"], d["hostname"], "NOUVEAU"))
             save_event(network, d["ip"], d["hostname"], "NOUVEAU")
-            if d["hostname"] == "inconnu" and not is_whitelisted(d["ip"]):
+            if d["hostname"] == "inconnu" and True:
                 alert_intrus(d["ip"], network)
     for ip in last_ips - current_ips:
         events.append((ip, "inconnu", "DISPARU"))
@@ -443,7 +405,7 @@ def main():
 
     print(f"\n  {len(networks)} reseau(x) detecte(s) :\n")
     for n in networks:
-        print(f"  {n['interface']} -> {n['network']}")
+        print(f"  {n}")
 
     for network_info in networks:
         scan_network(network_info)

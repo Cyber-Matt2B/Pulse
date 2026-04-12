@@ -507,7 +507,7 @@ def save_health_score(_=Depends(require_auth)):
     score = 100
     c.execute("SELECT ip, hostname, latency_ms FROM scans WHERE timestamp=(SELECT MAX(timestamp) FROM scans)")
     for d in c.fetchall():
-        if d["latency_ms"] and d["latency_ms"] > 200: score -= 15
+        if d["latency_ms"] and float(d["latency_ms"] or 0) > 200: score -= 15
     c.execute("SELECT COUNT(*) as cnt FROM scans WHERE status='down' AND timestamp>=datetime('now','-24 hours')")
     if c.fetchone()["cnt"] >= 2: score -= 10
     score = max(0, score)
@@ -581,7 +581,6 @@ async def agent_push(data: dict):
 
 # Servir les fichiers agent
 from fastapi.responses import FileResponse, PlainTextResponse
-import os as _os
 
 @app.get("/agent/agent.py")
 def serve_agent_py():
@@ -805,7 +804,6 @@ def create_backup(_=Depends(require_auth)):
 
 @app.get("/api/backups")
 def list_backups(_=Depends(require_auth)):
-    import os as _os
     backup_dir = _os.path.join(_BASE_DIR, "backups")
     if not _os.path.exists(backup_dir):
         return []
