@@ -24,8 +24,9 @@ security    = HTTPBearer(auto_error=False)
 def load_auth():
     if not os.path.exists(AUTH_FILE):
         pw = hashlib.sha256("admin123".encode()).hexdigest()
+        token = hashlib.sha256(f"pulse-{pw}".encode()).hexdigest()
         with open(AUTH_FILE, "w") as f:
-            json.dump({"username": "admin", "password": pw, "token": secrets.token_hex(32)}, f)
+            json.dump({"username": "admin", "password": pw, "token": token}, f)
     with open(AUTH_FILE) as f:
         return json.load(f)
 
