@@ -110,6 +110,11 @@ sleep 3
 API_STATUS=$(systemctl is-active pulse-api)
 DASH_STATUS=$(systemctl is-active pulse-dashboard)
 
+# Premier scan immédiat
+echo -e "${CYAN}  Lancement du premier scan...${NC}"
+cd "$PULSE_DIR" && venv/bin/python3 modules/network.py >> /var/log/pulse-scan.log 2>&1 &
+echo -e "${GREEN}  Scan en cours en arriere-plan${NC}"
+
 echo ""
 echo -e "${GREEN}  ============================================${NC}"
 echo -e "${GREEN}  PULSE v1.2 INSTALLE !${NC}"
