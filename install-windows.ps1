@@ -138,7 +138,7 @@ function Download-Dashboard {
     Write-Host "  Telechargement dashboard..." -ForegroundColor Cyan
     $buildZip = "$env:TEMP\pulse-build.zip"
     try {
-        Invoke-WebRequest -Uri "$ReleaseBase/pulse-build-v1.1.zip" -OutFile $buildZip -UseBasicParsing
+        Invoke-WebRequest -Uri "$ReleaseBase/pulse-build-v1.2.zip" -OutFile $buildZip -UseBasicParsing
         Remove-Item "$InstallDir\dashboard" -Recurse -Force 2>$null
         New-Item -ItemType Directory -Force -Path "$InstallDir\dashboard" | Out-Null
         Expand-Archive -Path $buildZip -DestinationPath "$InstallDir\dashboard" -Force

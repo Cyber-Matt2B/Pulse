@@ -50,7 +50,7 @@ for file in api.py alerts.py config.py db.py pulse_launcher.py modules/__init__.
 done
 
 echo -e "${CYAN}[4/6] Telechargement du dashboard...${NC}"
-curl -sSL "$RELEASE_BASE/pulse-build-v1.1.zip" -o /tmp/pulse-build.zip
+curl -sSL "$RELEASE_BASE/pulse-build-v1.2.zip" -o /tmp/pulse-build.zip
 mkdir -p "$PULSE_DIR/dashboard"
 unzip -q /tmp/pulse-build.zip -d "$PULSE_DIR/dashboard"
 rm /tmp/pulse-build.zip
